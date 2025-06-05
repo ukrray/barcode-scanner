@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сканер штрихкодов</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+        }
+        
+        #scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #interactive {
+            width: 100%;
+            height: 300px;
+        }
+        
+        #interactive video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+        }
+        
+        .drawingBuffer {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 8px;
+            word-break: break-all;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        button {
+            background: var(--tg-theme-button-color, #0088cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .warning { color: #ff9800; }
+    </style>
+</head>
+<body>
+    <div class="status" id="status">Инициализация...</div>
+    
+    <div id="scanner-container">
+        <div id="interactive" class="viewport"></div>
+    </div>
+    
+    <div class="controls">
+        <button id="start-btn" onclick="startScanner()">Запустить сканер</button>
+        <button id="stop-btn" onclick="stopScanner()" disabled>Остановить</button>
+        <button id="send-btn" onclick="sendToBot()" disabled>Отправить в бот</button>
+    </div>
+    
+    <div id="result" style="display: none;">
+        <strong>Отсканированный код:</strong>
+        <div id="barcode-result"></div>
+    </div>
+
+    <script>
+        // Инициализация Telegram Web App
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+        
+        let isScanning = false;
+        let lastScannedCode = null;
+        
+        // Функция запуска сканера
+        function startScanner() {
+            document.getElementById('status').textContent = 'Запуск камеры...';
+            document.getElementById('status').className = 'status warning';
+            
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#interactive'),
+                    constraints: {
+                        width: 400,
+                        height: 300,
+                        facingMode: "environment" // Задняя камера
+                    }
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                frequency: 10,
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_39_reader",
+                        "code_39_vin_reader",
+                        "codabar_reader",
+                        "upc_reader",
+                        "upc_e_reader",
+                        "i2of5_reader"
+                    ]
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.log(err);
+                    document.getElementById('status').textContent = 'Ошибка доступа к камере';
+                    document.getElementById('status').className = 'status error';
+                    return;
+                }
+                
+                console.log("Сканер инициализирован");
+                document.getElementById('status').textContent = 'Наведите камеру на штрихкод';
+                document.getElementById('status').className = 'status';
+                
+                Quagga.start();
+                isScanning = true;
+                
+                document.getElementById('start-btn').disabled = true;
+                document.getElementById('stop-btn').disabled = false;
+            });
+        }
+        
+        // Функция остановки сканера
+        function stopScanner() {
+            if (isScanning) {
+                Quagga.stop();
+                isScanning = false;
+                
+                document.getElementById('start-btn').disabled = false;
+                document.getElementById('stop-btn').disabled = true;
+                document.getElementById('status').textContent = 'Сканер остановлен';
+                document.getElementById('status').className = 'status';
+            }
+        }
+        
+        // Обработка результата сканирования
+        Quagga.onDetected(function(result) {
+            let code = result.codeResult.code;
+            
+            // Избегаем дублирования
+            if (lastScannedCode !== code) {
+                lastScannedCode = code;
+                
+                // Показываем результат
+                document.getElementById('barcode-result').textContent = code;
+                document.getElementById('result').style.display = 'block';
+                document.getElementById('send-btn').disabled = false;
+                
+                document.getElementById('status').textContent = 'Штрихкод отсканирован!';
+                document.getElementById('status').className = 'status success';
+                
+                // Вибрация (если поддерживается)
+                if (tg.HapticFeedback) {
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+                
+                // Автоматически останавливаем сканер
+                stopScanner();
+            }
+        });
+        
+        // Отправка данных в бот
+        function sendToBot() {
+            if (lastScannedCode) {
+                // Отправляем данные в Telegram бот
+                tg.sendData(JSON.stringify({
+                    action: 'barcode_scanned',
+                    barcode: lastScannedCode,
+                    timestamp: new Date().toISOString()
+                }));
+                
+                // Закрываем Web App
+                tg.close();
+            }
+        }
+        
+        // Обработка кнопки "Назад" в Telegram
+        tg.onEvent('backButtonClicked', function() {
+            stopScanner();
+            tg.close();
+        });
+        
+        // Показываем кнопку "Назад"
+        tg.BackButton.show();
+        
+        // Автозапуск при загрузке
+        window.addEventListener('load', function() {
+            setTimeout(startScanner, 1000);
+        });
+        
+        // Обработка ошибок
+        window.addEventListener('error', function(e) {
+            console.error('Ошибка:', e.error);
+            document.getElementById('status').textContent = 'Произошла ошибка';
+            document.getElementById('status').className = 'status error';
+        });
+    </script>
+</body>
+</html>
