@@ -80,6 +80,15 @@
         .success { color: #4CAF50; }
         .error { color: #f44336; }
         .warning { color: #ff9800; }
+
+        #debug-info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #666;
+        }
     </style>
 </head>
 <body>
@@ -101,34 +110,71 @@
         <div id="barcode-result"></div>
     </div>
 
+    <div id="debug-info">
+        <div id="debug-text">Отладочная информация:</div>
+    </div>
+
     <script>
         // Инициализация Telegram Web App
         let tg = window.Telegram?.WebApp;
+        let isScanning = false;
+        let lastScannedCode = null;
+        
+        // Функция отладки
+        function addDebugInfo(message) {
+            const debugDiv = document.getElementById('debug-text');
+            const timestamp = new Date().toLocaleTimeString();
+            debugDiv.innerHTML += `<br>[${timestamp}] ${message}`;
+            console.log(`[${timestamp}] ${message}`);
+        }
         
         // Отладочная информация
-        console.log('Telegram WebApp:', tg);
-        console.log('User Agent:', navigator.userAgent);
+        addDebugInfo('User Agent: ' + navigator.userAgent);
+        addDebugInfo('Window.Telegram: ' + (window.Telegram ? 'найден' : 'НЕ найден'));
+        addDebugInfo('WebApp: ' + (tg ? 'найден' : 'НЕ найден'));
         
         if (!tg) {
             console.error('Telegram WebApp не найден!');
             document.getElementById('status').textContent = 'Ошибка: Telegram WebApp не найден';
             document.getElementById('status').className = 'status error';
+            addDebugInfo('❌ Telegram WebApp недоступен');
         } else {
             console.log('Telegram WebApp найден');
-            tg.expand();
-            tg.ready();
+            addDebugInfo('✅ Telegram WebApp найден');
             
-            // Информация о пользователе
-            console.log('User:', tg.initDataUnsafe?.user);
+            // Правильная инициализация
+            try {
+                tg.ready();
+                tg.expand();
+                addDebugInfo('WebApp инициализирован');
+                
+                // Информация о пользователе
+                if (tg.initDataUnsafe?.user) {
+                    addDebugInfo('Пользователь: ' + tg.initDataUnsafe.user.first_name);
+                } else {
+                    addDebugInfo('Информация о пользователе недоступна');
+                }
+                
+                // Показываем кнопку "Назад"
+                tg.BackButton.show();
+                
+                // Обработка кнопки "Назад"
+                tg.onEvent('backButtonClicked', function() {
+                    addDebugInfo('Кнопка "Назад" нажата');
+                    stopScanner();
+                    tg.close();
+                });
+                
+            } catch (error) {
+                addDebugInfo('❌ Ошибка инициализации: ' + error.message);
+            }
         }
-        
-        let isScanning = false;
-        let lastScannedCode = null;
         
         // Функция запуска сканера
         function startScanner() {
             document.getElementById('status').textContent = 'Запуск камеры...';
             document.getElementById('status').className = 'status warning';
+            addDebugInfo('Запуск сканера...');
             
             Quagga.init({
                 inputStream: {
@@ -138,7 +184,7 @@
                     constraints: {
                         width: 400,
                         height: 300,
-                        facingMode: "environment" // Задняя камера
+                        facingMode: "environment"
                     }
                 },
                 locator: {
@@ -166,12 +212,14 @@
                     console.log(err);
                     document.getElementById('status').textContent = 'Ошибка доступа к камере';
                     document.getElementById('status').className = 'status error';
+                    addDebugInfo('❌ Ошибка камеры: ' + err.message);
                     return;
                 }
                 
                 console.log("Сканер инициализирован");
                 document.getElementById('status').textContent = 'Наведите камеру на штрихкод';
                 document.getElementById('status').className = 'status';
+                addDebugInfo('✅ Сканер запущен');
                 
                 Quagga.start();
                 isScanning = true;
@@ -191,6 +239,7 @@
                 document.getElementById('stop-btn').disabled = true;
                 document.getElementById('status').textContent = 'Сканер остановлен';
                 document.getElementById('status').className = 'status';
+                addDebugInfo('Сканер остановлен');
             }
         }
         
@@ -209,9 +258,10 @@
                 
                 document.getElementById('status').textContent = 'Штрихкод отсканирован!';
                 document.getElementById('status').className = 'status success';
+                addDebugInfo('✅ Штрихкод отсканирован: ' + code);
                 
                 // Вибрация (если поддерживается)
-                if (tg.HapticFeedback) {
+                if (tg && tg.HapticFeedback) {
                     tg.HapticFeedback.notificationOccurred('success');
                 }
                 
@@ -222,60 +272,59 @@
         
         // Отправка данных в бот
         function sendToBot() {
-            if (lastScannedCode) {
-                try {
-                    console.log('Отправка данных:', lastScannedCode);
-                    
-                    // Проверяем доступность Telegram WebApp
-                    if (!tg) {
-                        alert('Telegram WebApp не доступен');
-                        return;
-                    }
-                    
-                    // Отправляем данные в Telegram бот
-                    const data = {
-                        action: 'barcode_scanned',
-                        barcode: lastScannedCode,
-                        timestamp: new Date().toISOString()
-                    };
-                    
-                    console.log('Отправляемые данные:', data);
-                    
-                    // Отправляем данные как строку
-                    tg.sendData(JSON.stringify(data));
-                    
-                    // Показываем статус отправки
-                    document.getElementById('status').textContent = 'Данные отправлены в бот!';
-                    document.getElementById('status').className = 'status success';
-                    
-                    // НЕ закрываем автоматически - пусть пользователь видит результат
-                    // Добавляем кнопку закрытия
-                    document.getElementById('send-btn').textContent = 'Закрыть';
-                    document.getElementById('send-btn').onclick = () => tg.close();
-                    
-                } catch (error) {
-                    console.error('Ошибка отправки:', error);
-                    alert('Ошибка отправки данных: ' + error.message);
-                    document.getElementById('status').textContent = 'Ошибка отправки!';
-                    document.getElementById('status').className = 'status error';
-                }
-            } else {
+            if (!lastScannedCode) {
                 alert('Нет данных для отправки');
+                addDebugInfo('❌ Нет данных для отправки');
+                return;
+            }
+            
+            try {
+                addDebugInfo('Начало отправки данных...');
+                
+                // Проверяем доступность Telegram WebApp
+                if (!tg) {
+                    alert('Telegram WebApp не доступен');
+                    addDebugInfo('❌ Telegram WebApp недоступен');
+                    return;
+                }
+                
+                // Отправляем данные в Telegram бот
+                const data = {
+                    action: 'barcode_scanned',
+                    barcode: lastScannedCode,
+                    timestamp: new Date().toISOString(),
+                    user_agent: navigator.userAgent
+                };
+                
+                addDebugInfo('Отправляемые данные: ' + JSON.stringify(data));
+                
+                // Отправляем данные как строку
+                tg.sendData(JSON.stringify(data));
+                
+                // Показываем статус отправки
+                document.getElementById('status').textContent = 'Данные отправлены в бот!';
+                document.getElementById('status').className = 'status success';
+                addDebugInfo('✅ Данные отправлены');
+                
+                // Изменяем кнопку на "Закрыть"
+                document.getElementById('send-btn').textContent = 'Закрыть';
+                document.getElementById('send-btn').onclick = function() {
+                    addDebugInfo('Закрытие WebApp...');
+                    tg.close();
+                };
+                
+            } catch (error) {
+                console.error('Ошибка отправки:', error);
+                addDebugInfo('❌ Ошибка отправки: ' + error.message);
+                alert('Ошибка отправки данных: ' + error.message);
+                document.getElementById('status').textContent = 'Ошибка отправки!';
+                document.getElementById('status').className = 'status error';
             }
         }
         
-        // Обработка кнопки "Назад" в Telegram
-        tg.onEvent('backButtonClicked', function() {
-            stopScanner();
-            tg.close();
-        });
-        
-        // Показываем кнопку "Назад"
-        tg.BackButton.show();
-        
         // Тестовая функция
         function testData() {
-            console.log('Тест отправки данных');
+            addDebugInfo('Тест данных активирован');
             lastScannedCode = '1234567890123';
             document.getElementById('barcode-result').textContent = lastScannedCode;
             document.getElementById('result').style.display = 'block';
@@ -283,19 +332,29 @@
             
             document.getElementById('status').textContent = 'Тестовый штрихкод готов!';
             document.getElementById('status').className = 'status success';
+            addDebugInfo('✅ Тестовый штрихкод: ' + lastScannedCode);
         }
         
-        // Автозапуск при загрузке
+        // Автозапуск при загрузке (только если не в режиме отладки)
         window.addEventListener('load', function() {
-            setTimeout(startScanner, 1000);
+            addDebugInfo('Страница загружена');
+            // Убираем автозапуск для отладки
+            // setTimeout(startScanner, 1000);
         });
         
         // Обработка ошибок
         window.addEventListener('error', function(e) {
             console.error('Ошибка:', e.error);
+            addDebugInfo('❌ Глобальная ошибка: ' + e.error?.message);
             document.getElementById('status').textContent = 'Произошла ошибка';
             document.getElementById('status').className = 'status error';
         });
+        
+        // Дополнительная отладка
+        window.addEventListener('beforeunload', function() {
+            addDebugInfo('Страница закрывается');
+        });
+        
     </script>
 </body>
 </html>
