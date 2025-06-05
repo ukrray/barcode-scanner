@@ -93,6 +93,7 @@
         <button id="start-btn" onclick="startScanner()">Запустить сканер</button>
         <button id="stop-btn" onclick="stopScanner()" disabled>Остановить</button>
         <button id="send-btn" onclick="sendToBot()" disabled>Отправить в бот</button>
+        <button id="test-btn" onclick="testData()" style="background: #ff9800;">Тест данных</button>
     </div>
     
     <div id="result" style="display: none;">
@@ -232,27 +233,31 @@
                     }
                     
                     // Отправляем данные в Telegram бот
-                    const data = JSON.stringify({
+                    const data = {
                         action: 'barcode_scanned',
                         barcode: lastScannedCode,
                         timestamp: new Date().toISOString()
-                    });
+                    };
                     
                     console.log('Отправляемые данные:', data);
-                    tg.sendData(data);
+                    
+                    // Отправляем данные как строку
+                    tg.sendData(JSON.stringify(data));
                     
                     // Показываем статус отправки
-                    document.getElementById('status').textContent = 'Данные отправлены!';
+                    document.getElementById('status').textContent = 'Данные отправлены в бот!';
                     document.getElementById('status').className = 'status success';
                     
-                    // Закрываем Web App через небольшую задержку
-                    setTimeout(() => {
-                        tg.close();
-                    }, 1000);
+                    // НЕ закрываем автоматически - пусть пользователь видит результат
+                    // Добавляем кнопку закрытия
+                    document.getElementById('send-btn').textContent = 'Закрыть';
+                    document.getElementById('send-btn').onclick = () => tg.close();
                     
                 } catch (error) {
                     console.error('Ошибка отправки:', error);
                     alert('Ошибка отправки данных: ' + error.message);
+                    document.getElementById('status').textContent = 'Ошибка отправки!';
+                    document.getElementById('status').className = 'status error';
                 }
             } else {
                 alert('Нет данных для отправки');
@@ -267,6 +272,18 @@
         
         // Показываем кнопку "Назад"
         tg.BackButton.show();
+        
+        // Тестовая функция
+        function testData() {
+            console.log('Тест отправки данных');
+            lastScannedCode = '1234567890123';
+            document.getElementById('barcode-result').textContent = lastScannedCode;
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('send-btn').disabled = false;
+            
+            document.getElementById('status').textContent = 'Тестовый штрихкод готов!';
+            document.getElementById('status').className = 'status success';
+        }
         
         // Автозапуск при загрузке
         window.addEventListener('load', function() {
