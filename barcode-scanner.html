@@ -102,9 +102,24 @@
 
     <script>
         // Инициализация Telegram Web App
-        let tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
+        let tg = window.Telegram?.WebApp;
+        
+        // Отладочная информация
+        console.log('Telegram WebApp:', tg);
+        console.log('User Agent:', navigator.userAgent);
+        
+        if (!tg) {
+            console.error('Telegram WebApp не найден!');
+            document.getElementById('status').textContent = 'Ошибка: Telegram WebApp не найден';
+            document.getElementById('status').className = 'status error';
+        } else {
+            console.log('Telegram WebApp найден');
+            tg.expand();
+            tg.ready();
+            
+            // Информация о пользователе
+            console.log('User:', tg.initDataUnsafe?.user);
+        }
         
         let isScanning = false;
         let lastScannedCode = null;
@@ -207,15 +222,40 @@
         // Отправка данных в бот
         function sendToBot() {
             if (lastScannedCode) {
-                // Отправляем данные в Telegram бот
-                tg.sendData(JSON.stringify({
-                    action: 'barcode_scanned',
-                    barcode: lastScannedCode,
-                    timestamp: new Date().toISOString()
-                }));
-                
-                // Закрываем Web App
-                tg.close();
+                try {
+                    console.log('Отправка данных:', lastScannedCode);
+                    
+                    // Проверяем доступность Telegram WebApp
+                    if (!tg) {
+                        alert('Telegram WebApp не доступен');
+                        return;
+                    }
+                    
+                    // Отправляем данные в Telegram бот
+                    const data = JSON.stringify({
+                        action: 'barcode_scanned',
+                        barcode: lastScannedCode,
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    console.log('Отправляемые данные:', data);
+                    tg.sendData(data);
+                    
+                    // Показываем статус отправки
+                    document.getElementById('status').textContent = 'Данные отправлены!';
+                    document.getElementById('status').className = 'status success';
+                    
+                    // Закрываем Web App через небольшую задержку
+                    setTimeout(() => {
+                        tg.close();
+                    }, 1000);
+                    
+                } catch (error) {
+                    console.error('Ошибка отправки:', error);
+                    alert('Ошибка отправки данных: ' + error.message);
+                }
+            } else {
+                alert('Нет данных для отправки');
             }
         }
         
