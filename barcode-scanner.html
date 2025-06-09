@@ -101,7 +101,6 @@
     <div class="controls">
         <button id="start-btn" onclick="startScanner()">Запустить сканер</button>
         <button id="stop-btn" onclick="stopScanner()" disabled>Остановить</button>
-        <button id="send-btn" onclick="sendToBot()" disabled>Отправить в бот</button>
         <button id="test-btn" onclick="testData()" style="background: #ff9800;">Тест данных</button>
     </div>
     
@@ -163,6 +162,15 @@
                     addDebugInfo('Кнопка "Назад" нажата');
                     stopScanner();
                     tg.close();
+                });
+                
+                // Настраиваем главную кнопку
+                tg.MainButton.setText('Отправить в бот');
+                tg.MainButton.hide();
+                
+                // Обработчик главной кнопки
+                tg.onEvent('mainButtonClicked', function() {
+                    sendToBot();
                 });
                 
             } catch (error) {
@@ -254,9 +262,14 @@
                 // Показываем результат
                 document.getElementById('barcode-result').textContent = code;
                 document.getElementById('result').style.display = 'block';
-                document.getElementById('send-btn').disabled = false;
                 
-                document.getElementById('status').textContent = 'Штрихкод отсканирован!';
+                // Показываем главную кнопку для отправки
+                if (tg && tg.MainButton) {
+                    tg.MainButton.show();
+                    tg.MainButton.enable();
+                }
+                
+                document.getElementById('status').textContent = 'Штрихкод отсканирован! Нажмите кнопку внизу для отправки';
                 document.getElementById('status').className = 'status success';
                 addDebugInfo('✅ Штрихкод отсканирован: ' + code);
                 
@@ -298,20 +311,29 @@
                 
                 addDebugInfo('Отправляемые данные: ' + JSON.stringify(data));
                 
-                // Отправляем данные как строку
-                tg.sendData(JSON.stringify(data));
+                // Правильный способ отправки данных через Telegram Web App
+                // Данные будут переданы боту как web_app_data
+                const dataString = JSON.stringify(data);
+                
+                // Скрываем главную кнопку и показываем статус
+                tg.MainButton.hide();
+                
+                document.getElementById('status').textContent = 'Отправка данных...';
+                document.getElementById('status').className = 'status warning';
+                
+                // Отправляем данные и закрываем приложение
+                // Это правильный способ передачи данных в бота
+                tg.sendData(dataString);
                 
                 // Показываем статус отправки
-                document.getElementById('status').textContent = 'Данные отправлены в бот!';
+                document.getElementById('status').textContent = 'Данные отправлены! Закрытие...';
                 document.getElementById('status').className = 'status success';
-                addDebugInfo('✅ Данные отправлены');
+                addDebugInfo('✅ Данные отправлены, закрытие приложения');
                 
-                // Изменяем кнопку на "Закрыть"
-                document.getElementById('send-btn').textContent = 'Закрыть';
-                document.getElementById('send-btn').onclick = function() {
-                    addDebugInfo('Закрытие WebApp...');
+                // Закрываем приложение через небольшую задержку
+                setTimeout(() => {
                     tg.close();
-                };
+                }, 1000);
                 
             } catch (error) {
                 console.error('Ошибка отправки:', error);
@@ -319,6 +341,11 @@
                 alert('Ошибка отправки данных: ' + error.message);
                 document.getElementById('status').textContent = 'Ошибка отправки!';
                 document.getElementById('status').className = 'status error';
+                
+                // Показываем кнопку снова при ошибке
+                if (tg && tg.MainButton) {
+                    tg.MainButton.show();
+                }
             }
         }
         
@@ -328,9 +355,14 @@
             lastScannedCode = '1234567890123';
             document.getElementById('barcode-result').textContent = lastScannedCode;
             document.getElementById('result').style.display = 'block';
-            document.getElementById('send-btn').disabled = false;
             
-            document.getElementById('status').textContent = 'Тестовый штрихкод готов!';
+            // Показываем главную кнопку для отправки
+            if (tg && tg.MainButton) {
+                tg.MainButton.show();
+                tg.MainButton.enable();
+            }
+            
+            document.getElementById('status').textContent = 'Тестовый штрихкод готов! Нажмите кнопку внизу для отправки';
             document.getElementById('status').className = 'status success';
             addDebugInfo('✅ Тестовый штрихкод: ' + lastScannedCode);
         }
